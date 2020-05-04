@@ -48,8 +48,8 @@ FFMPEG="ffmpeg -ss $start_point "
 MAP_FLAGS="-map 0"
 COMMON_FLAGS="-max_muxing_queue_size 4096 -c:s copy -c:d copy "
 HWACCEL="-hwaccel cuvid "
-HWENCODE="-c:v hevc_nvenc -preset fast -b "
-CPUENCODE="-c:v libx265 -preset fast -b "
+HWENCODE="-c:v hevc_nvenc -preset fast -b:v "
+CPUENCODE="-c:v libx265 -preset fast -b:v "
 AUDIO_COPY="-c:a copy "
 
 # EXTERNAL_MAP_FLAGS is used to change stream mapping and add filters,
@@ -59,13 +59,29 @@ AUDIO_COPY="-c:a copy "
 # to save video, audio and subtitle
 #     EXTERNAL_MAP_FLAGS="-map 0:v -map 0:a -map 0:s
 
-if [ -z "$EXTERNAL_MAP_FLAGS" ]; then
-	COMMON_FLAGS="$MAP_FLAGS $COMMON_FLAGS"
-else
-	COMMON_FLAGS="$EXTERNAL_MAP_FLAGS $COMMON_FLAGS"
-fi
-
 ####################################################################
+function auto_map(){
+	name=$1
+	sname=${name%.*}
+	if [ -e "${sname}.ass" ]; then
+		echo "-i ${sname}.ass -map 0:V -map 0:a -map 0:d? -map 1 "
+		return
+	fi
+	if [ -e "${sname}.srt" ]; then
+		echo "-i ${sname}.srt -map 0:V -map 0:a -map 0:d? -map 1 "
+		return
+	fi
+	streams=`ffprobe.exe "$name" 2>&1 | grep Stream | grep -v mjpeg`
+	num_streams=`echo "${streams}" | wc -l`
+	map_flags=""
+	for ((i=0; i<num_streams; i++)) do
+		streams=${streams#*#}
+		map_value=`echo "$streams" | grep -P '^(\d+:\d+)' -o`
+		map_flags="$map_flags -map $map_value"
+	done
+	echo "$map_flags"
+}
+
 function video_is_invalid(){
 	if [ ! -e "$1" ]; then
 		return 0
@@ -136,6 +152,8 @@ function encode_func() {
 	local bitrate_unit
 	local converting_name
 	local height
+	local map_flags
+	local REAL_COMMON_FLAGS
 	if [ -z "$target" ]; then
 		target=0
 	fi
@@ -187,8 +205,8 @@ function encode_func() {
 		bitrate_unit=${bitrate#* }
 		bitrate_unit=${bitrate_unit%b*}
 		dst_bitrate_value=$(($src_bitrate_value*3/5))
-		line=`ffprobe -i "$name" 2>&1 | grep "Stream #.*Video:"`
-		src_encoding_format=${line##*Video: }
+		line=`ffprobe -i "$name" 2>&1 | grep "Stream #.*Video:" | grep -v "mjpeg"`
+		src_encoding_format=${line#*Video: }
 		src_encoding_format=${src_encoding_format%% *}
 		resolution=`echo $line | grep -P '(\d{3,})x(\d{3,})' -o`
 		echo $resolution
@@ -197,11 +215,13 @@ function encode_func() {
 		if [ $height -ge 1080 ]; then
 			base_bitrate=1200
 		elif [ $height -ge 720 ]; then
-			base_bitrate=800
+			base_bitrate=1000
+		elif [ $height -ge 576 ]; then
+			base_bitrate=900
 		elif [ $height -ge 480 ]; then
-			base_bitrate=500
+			base_bitrate=600
 		else
-			base_bitrate=300
+			base_bitrate=400
 		fi
 		if [ $dst_bitrate_value -gt $base_bitrate ]; then
 			dst_bitrate_value=$base_bitrate
@@ -221,14 +241,22 @@ function encode_func() {
 		echo "src_name=<$name>, dst_name=<$dst_name>"
 		echo "src_bitrate=$src_bitrate_value, dst_bitrate=$dst_bitrate_value"
 
+		REAL_COMMON_FLAGS=""
+		if [ -n "$EXTERNAL_MAP_FLAGS" ]; then
+			REAL_COMMON_FLAGS="$EXTERNAL_MAP_FLAGS $COMMON_FLAGS"
+		else
+			map_flags=`auto_map "$name"`
+			REAL_COMMON_FLAGS="$map_flags $COMMON_FLAGS"
+		fi
+
 		dbr=$dst_bitrate_value$bitrate_unit
 		ret=1
-		try_ffmpeg $ret "$HWACCEL -i @$name@ $COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $COMMON_FLAGS             $CPUENCODE $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "$HWACCEL -i @$name@ $COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $COMMON_FLAGS $AUDIO_COPY $CPUENCODE $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $CPUENCODE $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $CPUENCODE $dbr @$converting_name@"; ret=$?
 
 		if [ $ret -ne 0 ]; then
 			echo "<$name> cannot be converted!"
@@ -263,6 +291,12 @@ for file in $pattern;
 do
 	if [ ! -f "$file" ]; then
 		continue;
+	fi
+	if [ "${file##*.}" == "ass" ]; then
+		continue
+	fi
+	if [ "${file##*.}" == "srt" ]; then
+		continue
 	fi
 	bname=`basename "$file"`
 	new_name=${bname/$converting_prefix/}
