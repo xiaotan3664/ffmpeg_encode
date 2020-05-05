@@ -8,7 +8,7 @@
 # $4: format of encoded video
 
 pattern=*
-start_point=0
+start_point=
 default_bitrate=""
 custom_format=""
 if [ -n "$1" ]; then
@@ -40,16 +40,17 @@ temp_dir=$HOME/convert_temp        # where to save info files, like log
 log_dir="$temp_dir/log"            # where to save encoding log
 converting_prefix="==converting==" # filename prefix for converting file
 process_num=2                      # number of encoding processes
+flags_file="flags.txt"
 
 ###################################################################
 # ffmpeg parameters
 
-FFMPEG="ffmpeg -ss $start_point "
+FFMPEG="ffmpeg"
 MAP_FLAGS="-map 0"
 COMMON_FLAGS="-max_muxing_queue_size 4096 -c:s copy -c:d copy "
 HWACCEL="-hwaccel cuvid "
-HWENCODE="-c:v hevc_nvenc -preset fast -b:v "
-CPUENCODE="-c:v libx265 -preset fast -b:v "
+HWENCODE="-c:v hevc_nvenc -preset fast -b "
+CPUENCODE="-c:v libx265 -preset fast -b "
 AUDIO_COPY="-c:a copy "
 
 # EXTERNAL_MAP_FLAGS is used to change stream mapping and add filters,
@@ -60,6 +61,7 @@ AUDIO_COPY="-c:a copy "
 #     EXTERNAL_MAP_FLAGS="-map 0:v -map 0:a -map 0:s
 
 ####################################################################
+source `dirname "${BASH_SOURCE[0]}"`/common_utils.sh
 function auto_map(){
 	name=$1
 	sname=${name%.*}
@@ -82,24 +84,6 @@ function auto_map(){
 	echo "$map_flags"
 }
 
-function video_is_invalid(){
-	if [ ! -e "$1" ]; then
-		return 0
-	fi
-	line=`ffprobe -i "$1" 2>&1 | grep "Duration.*bitrate"`
-	if [ -z "$line" ]; then
-		echo "<$converting_name> is not valid"
-		return 0
-	else 
-		duration=${line%%,*}
-		duration=${duration##*: }
-		if [ "$duration" == "N/A" ]; then
-			echo "<$converting_name> is not valid"
-			return 0
-		fi
-	fi
-	return 1
-}
 
 function try_ffmpeg(){
 	local ret=$1
@@ -115,16 +99,21 @@ function try_ffmpeg(){
 	local dst_name=${flags%%\@*}
 	local after_flags=${flags#*\@}
 
+	local start_flags=""
+	if [ -n "$start_point" ]; then
+		start_flags="-ss $start_point"
+	fi
 	before_flags=`echo $before_flags | sed -e 's/ +/ /g'`
 	middle_flags=`echo $middle_flags | sed -e 's/ +/ /g'`
+	local extra_flags=`get_extra_flags "$src_name"`
 	after_flags=`echo $after_flags | sed -e 's/ +/ /g'`
 	if [ $ret -ne 0 ]; then
 		if [ -e "$converting_name" ]; then
 			rm "$converting_name"
 		fi
-		command="$FFMPEG $before_flags \"$src_name\" $middle_flags \"$dst_name\" $after_flags"
+		command="$FFMPEG $start_flags $before_flags \"$src_name\" $middle_flags $extra_flags \"$dst_name\" $after_flags"
 		echo "==>running '$command'"
-		$FFMPEG $before_flags "$src_name" $middle_flags "$dst_name" $after_flags
+		$FFMPEG $before_flags "$src_name" $middle_flags $extra_flags "$dst_name" $after_flags
 		ret=$?
 		if video_is_invalid "$converting_name"; then
 			ret=1
@@ -296,6 +285,9 @@ do
 		continue
 	fi
 	if [ "${file##*.}" == "srt" ]; then
+		continue
+	fi
+	if [ "${file##*.}" == "txt" ]; then
 		continue
 	fi
 	bname=`basename "$file"`
