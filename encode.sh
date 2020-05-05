@@ -323,12 +323,12 @@ done
 
 running_count=$process_num
 while [ $running_count -ne 0 ]; do
-	sleep 1
+	sleep 2
 	total_finished=0
 	total_ignored=0
 	total_failed=0
 	unset convertings
-	convertings=()
+	convertings[0]=""
 	running_count=0
 	for f in "$log_dir"/*.log; do
 		line=`grep "finished=.*failed" "$f" | tail -n 1`
@@ -346,12 +346,32 @@ while [ $running_count -ne 0 ]; do
 		total_failed=$((total_failed+failed))
 		total_ignored=$((total_ignored+ignored))
 		if [ -n "$converting" ]; then
-			convertings[$running_count]=$converting
+			line=`tail -n 1 "$f"`
+			if [[ "$line" =~ frame=.* ]]; then
+				process="${line##*time=}"
+				process="${process%x*}"	
+				process="${process/bitrate=/}"
+				process="${process/bits/b}"				
+				process="${process/speed=/x}"				
+				converting="$converting<$process>"
+			fi
+			convertings[$running_count]="$converting"
 			((running_count++))
 		fi
+
 	done
+
 	date_str=`date +%H:%M:%S`
-	echo -e "\r$date_str: run_process: $running_count, total_files: $file_count, finished: $total_finished, failed: $total_failed ignored: $total_ignored, converting: (${convertings[@]})\c"
-	#echo "$date_str: run_process: $running_count, total_files: $file_count, finished: $total_finished, failed: $total_failed ignored: $total_ignored, converting: (${convertings[@]})"
+	if [ "$running_count" != "$last_run_process" -o "$last_total_failed" != "$total_failed" -o "$last_total_finished" != "$total_finished" -o "$last_total_ignored" != "$total_ignored" ]; then
+	    echo ""
+		echo  "$date_str: run_process: $running_count, total_files: $file_count, finished: $total_finished, failed: $total_failed ignored: $total_ignored"
+	fi
+	if [ "${#convertings[@]}" -gt 0 ]; then
+		echo -e "\r$date_str: converting: (${convertings[@]})\c"
+	fi
+	last_total_finished=$total_finished
+	last_total_ignored=$total_ignored
+	last_total_failed=$total_failed
+	last_run_process=$running_count
 done
 echo ""
