@@ -8,9 +8,12 @@ if [ -n "$2" ]; then
 	suffix=$2
 fi
 for name in *; do
-	ext="${name##*.}"
+	ext=".${name##*.}"
+	if [ -d "$name" ]; then
+		ext=""
+	fi
 	new_name="${name##$prefix}"
-	new_name="${new_name%%$suffix}.$ext"
+	new_name="${new_name%%$suffix}${ext}"
 	if [ ! -e "$new_name" ]; then
 		echo "rename '$name'->'$new_name'"
 		mv "$name" "$new_name"

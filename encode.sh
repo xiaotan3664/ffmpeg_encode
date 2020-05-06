@@ -66,22 +66,14 @@ function auto_map(){
 	name=$1
 	sname=${name%.*}
 	if [ -e "${sname}.ass" ]; then
-		echo "-i ${sname}.ass -map 0:V -map 0:a -map 0:d? -map 1 "
+		echo "-i '${sname}.ass' -map 0:V -map 0:a -map 0:d? -map 1 "
 		return
 	fi
 	if [ -e "${sname}.srt" ]; then
-		echo "-i ${sname}.srt -map 0:V -map 0:a -map 0:d? -map 1 "
+		echo "-i '${sname}.srt' -map 0:V -map 0:a -map 0:d? -map 1 "
 		return
 	fi
-	streams=`ffprobe.exe "$name" 2>&1 | grep Stream | grep -v mjpeg`
-	num_streams=`echo "${streams}" | wc -l`
-	map_flags=""
-	for ((i=0; i<num_streams; i++)) do
-		streams=${streams#*#}
-		map_value=`echo "$streams" | grep -P '^(\d+:\d+)' -o`
-		map_flags="$map_flags -map $map_value"
-	done
-	echo "$map_flags"
+	echo "-map 0:V -map 0:a -map 0:s? -map 0:d?"
 }
 
 
@@ -111,9 +103,10 @@ function try_ffmpeg(){
 		if [ -e "$converting_name" ]; then
 			rm "$converting_name"
 		fi
-		command="$FFMPEG $start_flags $before_flags \"$src_name\" $middle_flags $extra_flags \"$dst_name\" $after_flags"
+		command="$FFMPEG $start_flags $before_flags '$src_name' $middle_flags $extra_flags '$dst_name' $after_flags"
 		echo "==>running '$command'"
-		$FFMPEG $before_flags "$src_name" $middle_flags $extra_flags "$dst_name" $after_flags
+		echo $command | bash
+		#$FFMPEG $before_flags "$src_name" $middle_flags $extra_flags "$dst_name" $after_flags
 		ret=$?
 		if video_is_invalid "$converting_name"; then
 			ret=1
@@ -194,7 +187,7 @@ function encode_func() {
 		bitrate_unit=${bitrate#* }
 		bitrate_unit=${bitrate_unit%b*}
 		dst_bitrate_value=$(($src_bitrate_value*3/5))
-		line=`ffprobe -i "$name" 2>&1 | grep "Stream #.*Video:" | grep -v "mjpeg"`
+		line=`ffprobe -i "$name" 2>&1 | grep "Stream #.*Video:" | grep -v mjpeg | grep -v png`
 		src_encoding_format=${line#*Video: }
 		src_encoding_format=${src_encoding_format%% *}
 		resolution=`echo $line | grep -P '(\d{3,})x(\d{3,})' -o`
@@ -351,8 +344,7 @@ while [ $running_count -ne 0 ]; do
 				process="${line##*time=}"
 				process="${process%x*}"	
 				process="${process/bitrate=/}"
-				process="${process/bits/b}"				
-				process="${process/speed=/x}"				
+				process="${process%%bits*}b/s x${process##*speed=}"
 				converting="$converting<$process>"
 			fi
 			convertings[$running_count]="$converting"
