@@ -63,19 +63,14 @@ AUDIO_COPY="-c:a copy "
 ####################################################################
 source `dirname "${BASH_SOURCE[0]}"`/common_utils.sh
 function auto_map(){
-	name=$1
-	sname=${name%.*}
-	if [ -e "${sname}.ass" ]; then
-		echo "-i '${sname}.ass' -map 0:V -map 0:a -map 0:d? -map 1 "
-		return
+	local name=$1
+	local sname=${name%.*}
+	local map_str="-map 0:V -map 0:a -map 0:s? -map 0:d? -map 0:t?"
+	if [ -e "${sname}.ass"  -o -e "${sname}.srt" ]; then
+		map_str="-i '${sname}.ass' $map_str -map 1 "
 	fi
-	if [ -e "${sname}.srt" ]; then
-		echo "-i '${sname}.srt' -map 0:V -map 0:a -map 0:d? -map 1 "
-		return
-	fi
-	echo "-map 0:V -map 0:a -map 0:s? -map 0:d?"
+	echo "$map_str"
 }
-
 
 function try_ffmpeg(){
 	local ret=$1
@@ -235,10 +230,10 @@ function encode_func() {
 		ret=1
 		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
 		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $CPUENCODE $dbr @$converting_name@"; ret=$?
+		#try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $CPUENCODE $dbr @$converting_name@"; ret=$?
 		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
 		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $CPUENCODE $dbr @$converting_name@"; ret=$?
+		#try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $CPUENCODE $dbr @$converting_name@"; ret=$?
 
 		if [ $ret -ne 0 ]; then
 			echo "<$name> cannot be converted!"

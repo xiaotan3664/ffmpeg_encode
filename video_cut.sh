@@ -35,8 +35,8 @@ for name in $pattern; do
 		if [ ! -e "$dst_dir" ]; then
 			mkdir -p "$dst_dir"
 		fi
-		echo "ffmpeg $start_flags -i $name -map 0 -c copy $end_flags -y $dst_name"
-		ffmpeg $start_flags -i "$name" -map 0 -c copy $end_flags -y "$dst_name"
+		echo "ffmpeg $start_flags -i $name -map 0 $end_flags -c copy -y $dst_name"
+		ffmpeg -i "$name" -map 0 $start_flags -c copy -avoid_negative_ts 1 $end_flags -y "$dst_name"
 	fi
 
 done
