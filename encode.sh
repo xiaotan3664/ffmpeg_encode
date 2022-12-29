@@ -23,17 +23,18 @@ if [ -n "$2" ]; then
 fi
 
 if [ -n "$3" ]; then
-	start_point=$3
+	custom_format=$3
 fi
 
 if [ -n "$4" ]; then
-	custom_format=$4
+	start_point=$4
 fi
+
 
 ###################################################################
 # config parameters
 
-default_format="mp4"               #.mp4=>.mp4, .mkv=>.mkv, other=>default_format
+default_format="mkv"               #.mp4=>.mp4, .mkv=>.mkv, other=>default_format
 convert_dir=converted              # converted dir where the encoded video to put
 finish_dir=finished                # finished dir where the source video to put when encoded successfully
 temp_dir=$HOME/convert_temp        # where to save info files, like log
@@ -65,9 +66,15 @@ source `dirname "${BASH_SOURCE[0]}"`/common_utils.sh
 function auto_map(){
 	local name=$1
 	local sname=${name%.*}
-	local map_str="-map 0:V -map 0:a -map 0:s? -map 0:d? -map 0:t?"
-	if [ -e "${sname}.ass"  -o -e "${sname}.srt" ]; then
+	local map_str="-map 0:V -map 0:a -map 0:s?" # -map 0:d? -map 0:t?
+	if [ -e "${sname}.ass" ]; then
 		map_str="-i '${sname}.ass' $map_str -map 1 "
+	fi
+	if [ -e "${sname}.srt" ]; then
+		map_str="-i '${sname}.srt' $map_str -map 1 "
+	fi
+	if [ -e "${sname}.ssa" ]; then
+		map_str="-i '${sname}.ssa' $map_str -map 1 "
 	fi
 	echo "$map_str"
 }
@@ -192,13 +199,13 @@ function encode_func() {
 		if [ $height -ge 1080 ]; then
 			base_bitrate=1200
 		elif [ $height -ge 720 ]; then
-			base_bitrate=1000
-		elif [ $height -ge 576 ]; then
 			base_bitrate=900
+		elif [ $height -ge 576 ]; then
+			base_bitrate=800
 		elif [ $height -ge 480 ]; then
-			base_bitrate=600
+			base_bitrate=700
 		else
-			base_bitrate=400
+			base_bitrate=600
 		fi
 		if [ $dst_bitrate_value -gt $base_bitrate ]; then
 			dst_bitrate_value=$base_bitrate
@@ -273,6 +280,9 @@ do
 		continue
 	fi
 	if [ "${file##*.}" == "srt" ]; then
+		continue
+	fi
+	if [ "${file##*.}" == "ssa" ]; then
 		continue
 	fi
 	if [ "${file##*.}" == "txt" ]; then

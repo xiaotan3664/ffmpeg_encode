@@ -16,6 +16,7 @@ for name in $pattern; do
 	if [ -z "$cut_flags" ]; then
 		continue
 	fi
+	echo $name
 	start_flags=""
 	end_flags=""
 	tmp_str="${cut_flags#*-ss}"
