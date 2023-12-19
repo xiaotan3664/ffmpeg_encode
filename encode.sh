@@ -40,7 +40,8 @@ finish_dir=finished                # finished dir where the source video to put 
 temp_dir=$HOME/convert_temp        # where to save info files, like log
 log_dir="$temp_dir/log"            # where to save encoding log
 converting_prefix="==converting==" # filename prefix for converting file
-process_num=2                      # number of encoding processes
+# for RTX4090, support max 5 procs
+process_num=${ENCODE_PROC:-2}      # number of encoding processes
 flags_file="flags.txt"
 
 ###################################################################
@@ -66,7 +67,7 @@ source `dirname "${BASH_SOURCE[0]}"`/common_utils.sh
 function auto_map(){
 	local name=$1
 	local sname=${name%.*}
-	local map_str="-map 0:V -map 0:a -map 0:s?" # -map 0:d? -map 0:t?
+	local map_str="-map 0:V -map 0:a "
 	if [ -e "${sname}.ass" ]; then
 		map_str="-i '${sname}.ass' $map_str -map 1 "
 	fi
@@ -76,6 +77,7 @@ function auto_map(){
 	if [ -e "${sname}.ssa" ]; then
 		map_str="-i '${sname}.ssa' $map_str -map 1 "
 	fi
+	map_str="$map_str -map 0:s?" # -map 0:d? -map 0:t?
 	echo "$map_str"
 }
 
@@ -196,10 +198,12 @@ function encode_func() {
 		echo $resolution
 		height=${resolution#*x}
 		base_bitrate=2000
-		if [ $height -ge 1080 ]; then
-			base_bitrate=1200
+		if [ $height -ge 2160 ]; then
+			base_bitrate=4000
+		elif [ $height -ge 1080 ]; then
+			base_bitrate=2000
 		elif [ $height -ge 720 ]; then
-			base_bitrate=900
+			base_bitrate=1500
 		elif [ $height -ge 576 ]; then
 			base_bitrate=800
 		elif [ $height -ge 480 ]; then
