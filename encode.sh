@@ -11,15 +11,16 @@ pattern=*
 start_point=
 default_bitrate=""
 custom_format=""
+
 if [ -n "$1" ]; then
-	pattern=$1
-fi
-if [ -d "$pattern" ]; then
-	pattern="$pattern/*"
+	default_bitrate=$1
 fi
 
 if [ -n "$2" ]; then
-	default_bitrate=$2
+	pattern=$2
+fi
+if [ -d "$pattern" ]; then
+	pattern="$pattern/*"
 fi
 
 if [ -n "$3" ]; then
@@ -107,8 +108,8 @@ function try_ffmpeg(){
 		if [ -e "$converting_name" ]; then
 			rm "$converting_name"
 		fi
-		command="$FFMPEG $start_flags $before_flags '$src_name' $middle_flags $extra_flags '$dst_name' $after_flags"
-		echo "==>running '$command'"
+		command="$FFMPEG $start_flags $before_flags \"$src_name\" $middle_flags $extra_flags \"$dst_name\" $after_flags"
+		echo "==>running \"$command\""
 		echo $command | bash
 		#$FFMPEG $before_flags "$src_name" $middle_flags $extra_flags "$dst_name" $after_flags
 		ret=$?
@@ -194,10 +195,14 @@ function encode_func() {
 		line=`ffprobe -i "$name" 2>&1 | grep "Stream #.*Video:" | grep -v mjpeg | grep -v png`
 		src_encoding_format=${line#*Video: }
 		src_encoding_format=${src_encoding_format%% *}
+		pix_format=${line#*yuv}
+		pix_format=${pix_format%%(*}
+		pix_format="-pix_fmt yuv${pix_format%%,*}"
 		resolution=`echo $line | grep -P '(\d{3,})x(\d{3,})' -o`
 		echo $resolution
 		height=${resolution#*x}
 		base_bitrate=2000
+		# for movie
 		if [ $height -ge 2160 ]; then
 			base_bitrate=4000
 		elif [ $height -ge 1080 ]; then
@@ -225,6 +230,11 @@ function encode_func() {
 				continue
 			fi
 		fi
+		if [[ $line =~ .*bt2020.* ]]; then
+			echo "<$name> is a HDR video, encode.sh not support yet."
+			((ignore_count++))
+			continue
+		fi
 		echo "==>begin encoding: $name"
 		echo "src_name=<$name>, dst_name=<$dst_name>"
 		echo "src_bitrate=$src_bitrate_value, dst_bitrate=$dst_bitrate_value"
@@ -239,12 +249,12 @@ function encode_func() {
 
 		dbr=$dst_bitrate_value$bitrate_unit
 		ret=1
-		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr @$converting_name@"; ret=$?
-		#try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $CPUENCODE $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
-		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr @$converting_name@"; ret=$?
-		#try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $CPUENCODE $dbr @$converting_name@"; ret=$?
+		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr $pix_format @$converting_name@"; ret=$?
+		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $HWENCODE  $dbr $pix_format @$converting_name@"; ret=$?
+		#try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS             $CPUENCODE $dbr $pix_format @$converting_name@"; ret=$?
+		try_ffmpeg $ret "$HWACCEL -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr $pix_format @$converting_name@"; ret=$?
+		try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $HWENCODE  $dbr $pix_format @$converting_name@"; ret=$?
+		#try_ffmpeg $ret "         -i @$name@ $REAL_COMMON_FLAGS $AUDIO_COPY $CPUENCODE $dbr $pix_format @$converting_name@"; ret=$?
 
 		if [ $ret -ne 0 ]; then
 			echo "<$name> cannot be converted!"

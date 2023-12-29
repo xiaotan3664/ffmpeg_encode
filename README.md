@@ -12,10 +12,10 @@ In windows, using git bash, and set encode.sh directory in PATH env
 encode.sh
 
 #encode all the mp4 files in current directory, and set overall bitrate 1200kb/s
-encode.sh "*.mp4" 1200
+encode.sh 1200 "*.mp4"
 
 #encode all the video files in 'video_dir' directory, bitrate=1200kb/s
-encode.sh video_dir 1200
+encode.sh 1200 video_dir
 
 #encode all the subdir videos
 for subdir in video_dir/*; do encode.sh "$subdir"; done
